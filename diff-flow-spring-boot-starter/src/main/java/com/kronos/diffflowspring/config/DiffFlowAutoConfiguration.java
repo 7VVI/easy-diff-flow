@@ -1,4 +1,4 @@
-package com.kronos.diffflowspring;
+package com.kronos.diffflowspring.config;
 
 /**
  * @author zhangyh
