@@ -4,12 +4,13 @@
 
 ## 功能特性
 
-- **字段级差异比较**：支持对象间字段级差异比较，包括嵌套对象、集合、Map和数组的递归比较
-- **工作流集成**：支持与主流工作流引擎（Activiti/Flowable/Camunda/JBPM）集成，实现审批流程
-- **方法代理执行**：支持方法代理执行，审批通过后自动执行目标方法
-- **注解驱动**：提供`@DiffApproval`注解，简化差异比较与审批流程的集成
-- **灵活配置**：支持丰富的配置选项，可根据需求定制差异比较与审批流程
-- **无工作流模式**：支持跳过审批流程，直接对比并应用变更
+- 字段级差异比较：支持对象间字段级差异比较，包括嵌套对象、集合、Map和数组的递归比较
+- 工作流集成：支持与主流工作流引擎（Activiti/Flowable/Camunda/JBPM）集成，实现审批流程
+- 方法代理执行：支持方法代理执行，审批通过后自动执行目标方法
+- 注解驱动：提供`@DiffApproval`注解，简化差异比较与审批流程的集成
+- 灵活配置：支持丰富的配置选项，可根据需求定制差异比较与审批流程
+- 无工作流模式：支持跳过审批流程，直接对比并应用变更
+- 智能比较&格式化解析：基于字段类型与`htmlType`自动选择合适的比较器与格式化器，避免空指针并降低配置成本
 
 ## 快速开始
 
@@ -21,205 +22,100 @@
     <artifactId>diff-flow-spring-boot-starter</artifactId>
     <version>1.0.0</version>
 </dependency>
-
-<!-- 如果使用Flowable工作流引擎 -->
-<dependency>
-    <groupId>org.flowable</groupId>
-    <artifactId>flowable-spring-boot-starter</artifactId>
-    <version>6.7.2</version>
-</dependency>
 ```
 
-### 2. 配置应用
+### 2. 注册规则（非工作流直用场景）
 
-在`application.properties`或`application.yml`中添加配置：
+通过 `DiffRegistry` 以函数式链式方式注册字段映射关系，可选指定字段展示名、字段类型(`htmlType`)、比较器与格式化器：
+
+```java
+DiffRegistry.of("invoiceRecords-vs-records", InvoiceRecords.class, Records.class)
+    .map(InvoiceRecords::getInvoiceStatus, Records::getInvoiceStatus, "开票状态", CodegenColumnHtmlTypeEnum.ENUM)
+    .map(InvoiceRecords::getInvoiceAmount, Records::getAmount, "开票金额", CodegenColumnHtmlTypeEnum.MONEY)
+    .map(InvoiceRecords::getInvoiceNo, Records::getInvoiceNo, "发票号", CodegenColumnHtmlTypeEnum.TEXT,
+         b -> b.comparator(FieldComparator.ignoringBlank()))
+    .map(InvoiceRecords::getItems, Records::getItems, "明细列表", CodegenColumnHtmlTypeEnum.TEXT,
+         b -> b.collectionKeyPath("id"))
+    .register();
+```
+
+对比并生成差异：
+
+```java
+List<DiffItem> diffs = DiffEngine.diff(invoice, record, DiffRegistry.get("invoiceRecords-vs-records"));
+```
+
+### 3. 使用注解（工作流与审批集成示例）
+
+```java
+@DiffApproval(processDefinitionKey = "userUpdateProcess", businessKeyExpression = "'user-' + #newUser.id")
+public User updateUser(User oldUser, User newUser) {
+    return userRepository.save(newUser);
+}
+```
+
+## 比较器与格式化器解析策略
+
+系统提供“显式优先，智能兜底”的解析策略，极大减少手工配置：
+
+- 显式优先：若在 `DiffRule` 上显式设置了 `comparator` 或 `formatter`，则直接使用该配置。
+- 其后按 `htmlType` 选择：
+  - MONEY：比较器使用 `doubleWithEpsilon(…)` 容忍微小误差；格式化器使用 `FieldFormatter.money()` 输出两位小数。
+  - NUMBER：比较器使用 `doubleWithEpsilon(0.001)` 容忍 0.001 级误差；格式化器默认 `noop()`。
+  - TEXT：比较器 `ignoringBlank()` 忽略前后空白；格式化器默认 `noop()`。
+  - ENUM / DATE：比较器使用默认严格比较；格式化器默认 `noop()`。
+- 若未设置 `htmlType`，按字段类型兜底：
+  - BigDecimal/Double/Float：`doubleWithEpsilon(0.001)`
+  - String：`ignoringBlank()`
+  - java.util.Date/java.time.LocalDate/LocalDateTime：默认严格比较
+  - 其它：默认比较
+- 任何情况下若未解析到比较器/格式化器，将回退到：`FieldComparator.defaultComparator()` 与 `FieldFormatter.noop()`。
+
+对应实现：
+- 比较器解析：`DefaultComparatorResolver`，入口 `ComparatorResolver#resolve`。
+- 格式化器解析：`DefaultFormatterResolver`，入口 `FormatterResolver#resolve`（对 MONEY 返回 `FieldFormatter.money()`，其它返回 `noop()`）。
+
+## 空值与NPE防护
+
+- 当左右值均为 `null` 且未显式指定比较器时，该字段视为“无差异”，直接跳过，避免不必要的比较与潜在 NPE。
+- 所有比较均经过空安全处理，默认比较器内部使用 `Objects.equals` 等安全比较。
+
+## 路径访问能力
+
+引擎使用 `ReflectivePathAccessor` 通过路径读取对象字段，支持：
+- 普通属性访问（如 `user.name`）
+- 集合与数组索引（如 `items[0].id`）
+- Map 键访问（如 `ext["key"]`）
+
+## 常用API
+
+- 规则注册：`DiffRegistry.of(name, Left.class, Right.class).map(...).register()`
+- 执行对比：`DiffEngine.diff(left, right, DiffRegistry.get(name))`
+- 枚举类型：`CodegenColumnHtmlTypeEnum { TEXT, NUMBER, DATE, ENUM, MONEY }`
+- 手动指定：
+  - 比较器：`FieldComparator.defaultComparator() / equalsComparator() / doubleWithEpsilon(eps) / ignoringBlank()`
+  - 格式化器：`FieldFormatter.noop() / money()`
+
+## 示例：金额与文本对比
+
+```java
+DiffRegistry.of("demo", L.class, R.class)
+  .map(L::getAmount, R::getAmount, "金额", CodegenColumnHtmlTypeEnum.MONEY)
+  .map(L::getComment, R::getComment, "备注", CodegenColumnHtmlTypeEnum.TEXT)
+  .register();
+
+List<DiffItem> diffs = DiffEngine.diff(l, r, DiffRegistry.get("demo"));
+// 金额将按两位小数格式化输出，文本比较将忽略前后空白
+```
+
+## 配置说明（节选）
 
 ```properties
-# 差异比较与审批系统配置
-diff.flow.enabled=true
-
 # 差异比较配置
 diff.flow.diff.ignore-null-value=true
-diff.flow.diff.ignore-empty-collection=true
-diff.flow.diff.global-ignore-fields=id,createTime,updateTime,version
-
-# 工作流配置
-diff.flow.workflow.enabled=true
-diff.flow.workflow.engine-type=flowable
-diff.flow.workflow.default-process-key=diffApprovalProcess
-```
-
-### 3. 使用注解方式
-
-```java
-import com.kronos.diffflow.annotation.DiffApproval;
-import org.springframework.stereotype.Service;
-
-@Service
-public class UserService {
-
-    /**
-     * 更新用户信息，需要审批
-     */
-    @DiffApproval(processDefinitionKey = "userUpdateProcess", 
-                 businessKeyExpression = "'user-' + #newUser.id")
-    public User updateUser(User oldUser, User newUser) {
-        // 方法体内的代码只有在审批通过后才会执行
-        // 无需手动比较差异，框架会自动处理
-        return userRepository.save(newUser);
-    }
-    
-    /**
-     * 更新用户状态，无需审批
-     */
-    @DiffApproval(skipApproval = true)
-    public User updateUserStatus(User oldUser, User newUser) {
-        // 直接执行，无需审批
-        return userRepository.save(newUser);
-    }
-}
-```
-
-### 4. 使用API方式
-
-```java
-import com.kronos.diffflow.model.DiffResult;
-import com.kronos.diffflow.service.DiffFlowService;
-import org.springframework.stereotype.Service;
-
-@Service
-public class OrderService {
-
-    private final DiffFlowService diffFlowService;
-    
-    public OrderService(DiffFlowService diffFlowService) {
-        this.diffFlowService = diffFlowService;
-    }
-    
-    /**
-     * 比较订单差异并提交审批
-     */
-    public String compareAndSubmitOrder(Order oldOrder, Order newOrder) {
-        String businessKey = "order-" + oldOrder.getId();
-        return diffFlowService.compareAndSubmitForApproval(
-            oldOrder, newOrder, businessKey, "orderApprovalProcess");
-    }
-    
-    /**
-     * 比较订单差异并直接应用变更（无需审批）
-     */
-    public DiffResult compareAndApplyOrder(Order oldOrder, Order newOrder) {
-        return diffFlowService.compareAndApply(oldOrder, newOrder, "id", "createTime");
-    }
-    
-    /**
-     * 完成审批任务
-     */
-    public void approveOrder(String taskId, boolean approved, String comment) {
-        diffFlowService.completeApprovalTask(taskId, approved, comment);
-    }
-}
-```
-
-## 配置说明
-
-### 差异比较配置
-
-```properties
-# 是否忽略空值
-diff.flow.diff.ignore-null-value=true
-
-# 是否忽略空集合
-diff.flow.diff.ignore-empty-collection=true
-
-# 全局忽略的字段
-diff.flow.diff.global-ignore-fields=id,createTime,updateTime,version
-
-# 是否启用缓存
-diff.flow.diff.enable-cache=true
-
-# 缓存过期时间（毫秒）
-diff.flow.diff.cache-expiration=3600000
-```
-
-### 工作流配置
-
-```properties
-# 是否启用工作流
-diff.flow.workflow.enabled=true
-
-# 工作流引擎类型（支持：activiti, flowable, camunda, jbpm）
-diff.flow.workflow.engine-type=flowable
-
-# 默认流程定义键
-diff.flow.workflow.default-process-key=diffApprovalProcess
-
-# 是否自动部署流程定义
-diff.flow.workflow.auto-deploy=true
-
-# 流程定义文件路径
-diff.flow.workflow.process-definition-location=classpath:processes/
-```
-
-## 注解参数说明
-
-`@DiffApproval`注解支持以下参数：
-
-| 参数 | 说明 | 默认值 |
-| --- | --- | --- |
-| processDefinitionKey | 流程定义键 | 配置文件中的默认值 |
-| businessKeyExpression | 业务键生成表达式（SpEL） | 自动生成UUID |
-| skipApproval | 是否跳过审批 | false |
-| sourceIndex | 源对象参数索引 | 0 |
-| targetIndex | 目标对象参数索引 | 1 |
-| ignoreFields | 忽略的字段 | {} |
-| includeFields | 只比较的字段 | {} |
-| autoApplyDiff | 是否在审批通过后自动应用差异 | true |
-
-## 工作流集成
-
-系统默认提供了一个基础的差异审批流程定义（`diff-approval-process.bpmn20.xml`），可以根据实际需求进行定制。
-
-### 自定义流程定义
-
-1. 在`src/main/resources/processes/`目录下创建自定义的流程定义文件
-2. 在流程定义中使用系统提供的流程变量：
-   - `diffResult`：差异结果
-   - `businessKey`：业务键
-   - `methodContext`：方法执行上下文
-   - `approved`：是否批准
-   - `comment`：审批意见
-
-### 集成其他工作流引擎
-
-系统默认支持Flowable工作流引擎，如需集成其他工作流引擎，可以实现`WorkflowService`接口并注册为Spring Bean。
-
-## 高级用法
-
-### 自定义差异比较逻辑
-
-```java
-import com.kronos.diffflow.service.DiffService;
-import org.springframework.stereotype.Service;
-
-@Service
-public class CustomDiffService implements DiffService {
-    // 实现自定义的差异比较逻辑
-}
-```
-
-### 自定义工作流服务
-
-```java
-import com.kronos.diffflow.service.WorkflowService;
-import org.springframework.stereotype.Service;
-
-@Service
-public class CustomWorkflowService implements WorkflowService {
-    // 实现自定义的工作流服务逻辑
-}
+# ... 其它同原有说明
 ```
 
 ## 许可证
 
-本项目采用 [Apache License 2.0](LICENSE) 许可证。
+本项目采用 Apache License 2.0 许可证，详见 [LICENSE](LICENSE)。
