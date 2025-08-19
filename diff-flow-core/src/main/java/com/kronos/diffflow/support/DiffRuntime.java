@@ -66,7 +66,9 @@ public class DiffRuntime {
     private String extractKeyPath(String collectionKeyPath){
         // 形如 items[].id 或 details[].sku.code → 提取 [] 后面的部分
         int p = collectionKeyPath.indexOf("[]");
-        if (p<0) return collectionKeyPath;
+        if (p<0){
+            return collectionKeyPath;
+        }
         String tail = collectionKeyPath.substring(p+3); // skip [].
         return tail;
     }

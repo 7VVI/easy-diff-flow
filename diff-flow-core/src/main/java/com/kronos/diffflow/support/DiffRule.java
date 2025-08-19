@@ -10,7 +10,7 @@ import lombok.Data;
 /**
  * @author zhangyh
  * @Date 2025/8/19 9:39
- * @desc
+ * @desc 规则对象
  */
 @Data
 @Builder

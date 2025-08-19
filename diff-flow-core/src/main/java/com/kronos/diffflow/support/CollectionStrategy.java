@@ -9,7 +9,7 @@ import java.util.function.Function;
 /**
  * @author zhangyh
  * @Date 2025/8/19 9:38
- * @desc
+ * @desc 集合对比策略（按 key 提取）
  */
 public interface CollectionStrategy {
     // 按某个key抽取（如 id）对集合进行对比，输出元素级Diff

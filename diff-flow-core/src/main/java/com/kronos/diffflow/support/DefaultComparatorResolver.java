@@ -9,7 +9,9 @@ import com.kronos.diffflow.support.function.FieldComparator;
  */
 public final class DefaultComparatorResolver implements ComparatorResolver {
     @Override public FieldComparator resolve(DiffRule rule, Class<?> fieldType) {
-        if (rule.comparator != null) return rule.comparator;
+        if (rule.comparator != null) {
+            return rule.comparator;
+        }
         // 可按类型分发，这里简单返回 equals 比较
         return FieldComparator.equalsComparator();
     }

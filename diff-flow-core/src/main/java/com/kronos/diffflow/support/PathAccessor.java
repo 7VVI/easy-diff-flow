@@ -3,7 +3,7 @@ package com.kronos.diffflow.support;
 /**
  * @author zhangyh
  * @Date 2025/8/19 9:37
- * @desc
+ * @desc  Path 访问（a.b.c / list[2] / map[key]）
  */
 public interface PathAccessor {
     Object read(Object root, String path); // 支持 a.b.c、list[2]、map[key]

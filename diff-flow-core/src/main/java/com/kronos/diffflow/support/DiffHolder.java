@@ -11,6 +11,14 @@ import java.util.List;
  */
 public class DiffHolder {
     private static final ThreadLocal<List<DiffItem>> TL = new ThreadLocal<>();
-    public static void set(List<DiffItem> items){ TL.set(items); }
-    public static List<DiffItem> getAndClear(){ List<DiffItem> v = TL.get(); TL.remove(); return v; }
+
+    public static void set(List<DiffItem> items) {
+        TL.set(items);
+    }
+
+    public static List<DiffItem> getAndClear() {
+        List<DiffItem> v = TL.get();
+        TL.remove();
+        return v;
+    }
 }

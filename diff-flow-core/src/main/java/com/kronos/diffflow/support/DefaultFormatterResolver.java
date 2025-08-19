@@ -1,7 +1,6 @@
 package com.kronos.diffflow.support;
 
 import com.kronos.diffflow.enums.CodegenColumnHtmlTypeEnum;
-import com.kronos.diffflow.support.function.FieldComparator;
 import com.kronos.diffflow.support.function.FieldFormatter;
 
 /**
@@ -12,7 +11,9 @@ import com.kronos.diffflow.support.function.FieldFormatter;
 public class DefaultFormatterResolver implements FormatterResolver {
     @Override public FieldFormatter resolve(DiffRule rule, Class<?> fieldType) {
         if (rule.formatter != null) return rule.formatter;
-        if (rule.htmlType == CodegenColumnHtmlTypeEnum.MONEY) return FieldComparator.money2();
-        return FieldComparator.noop();
+        if (rule.htmlType == CodegenColumnHtmlTypeEnum.MONEY) {
+            return FieldFormatter.money();
+        }
+        return FieldFormatter.noop();
     }
 }

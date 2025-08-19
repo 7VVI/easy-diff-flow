@@ -13,8 +13,13 @@ import java.time.Instant;
 @Data
 @Builder
 public class DiffContext {
-    public final String operator;
-    public final String requestId;
+    public final String  operator;
+    public final String  requestId;
     public final Instant bizTime;
-    public DiffContext(String operator, String requestId, Instant bizTime){ this.operator=operator; this.requestId=requestId; this.bizTime=bizTime; }
+
+    public DiffContext(String operator, String requestId, Instant bizTime) {
+        this.operator = operator;
+        this.requestId = requestId;
+        this.bizTime = bizTime;
+    }
 }

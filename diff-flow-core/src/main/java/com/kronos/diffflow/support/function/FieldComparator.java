@@ -1,7 +1,6 @@
 package com.kronos.diffflow.support.function;
 
 import java.math.BigDecimal;
-import java.text.DecimalFormat;
 import java.util.Objects;
 
 /**
@@ -42,7 +41,5 @@ public interface FieldComparator {
         return null;
     }
 
-    static FieldFormatter noop() { return v -> v == null ? null : v.toString(); }
-    static FieldFormatter money2() { return v -> v == null ? null : new DecimalFormat("0.00").format(new BigDecimal(v.toString())); }
     private static String normBlank(Object o) { return (o == null) ? null : ("".equals(o.toString().trim()) ? null : o.toString().trim()); }
 }
