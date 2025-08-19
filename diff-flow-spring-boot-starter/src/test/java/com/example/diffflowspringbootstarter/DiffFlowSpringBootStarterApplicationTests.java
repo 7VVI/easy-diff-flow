@@ -20,14 +20,13 @@ class DiffFlowSpringBootStarterApplicationTests {
     @Test
     void contextLoads() {
         DiffRegistry.of("invoiceRecords-vs-records", InvoiceRecords.class, Records.class)
-                .map(InvoiceRecords::getInvoiceStatus, Records::getInvoiceStatus, "开票状态", CodegenColumnHtmlTypeEnum.ENUM,   b -> b.comparator(FieldComparator.defaultComparator()).formatter(FieldComparator.noop()))
-                .map(InvoiceRecords::getInvoiceAmount, Records::getAmount, "开票金额", CodegenColumnHtmlTypeEnum.MONEY,
-                        b -> b.comparator(FieldComparator.defaultComparator()).formatter(FieldComparator.money2()))
+                .map(InvoiceRecords::getInvoiceStatus, Records::getInvoiceStatus, "开票状态", CodegenColumnHtmlTypeEnum.ENUM)
+                .map(InvoiceRecords::getInvoiceAmount, Records::getAmount, "开票金额", CodegenColumnHtmlTypeEnum.MONEY)
                 .map(InvoiceRecords::getBuyerName, Records::getBuyerName, "购方名称",
                         CodegenColumnHtmlTypeEnum.TEXT, b -> b.comparator(FieldComparator.ignoringBlank()))
                 // 集合：items[].id 为键
-//                .map(InvoiceRecords::getItems, Records::getItems, "明细列表", CodegenColumnHtmlTypeEnum.TEXT,
-//                        b -> b.collectionKeyPath("items[].id"))
+                .map(InvoiceRecords::getItems, Records::getItems, "明细列表", CodegenColumnHtmlTypeEnum.TEXT,
+                        b -> b.collectionKeyPath("items[].id"))
                 .register();
         System.out.println(DiffRegistry.get("invoiceRecords-vs-records"));
 
